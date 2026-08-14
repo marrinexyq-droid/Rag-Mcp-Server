@@ -252,7 +252,7 @@ def test_multimodal_assembler_image_content_structure() -> None:
         
         img_block = image_blocks[0]
         assert img_block.type == "image", "ImageContent type should be 'image'"
-        assert img_block.mimeType == "image/png", "MIME type should be 'image/png'"
+        assert img_block.mime_type == "image/png", "MIME type should be 'image/png'"
         assert img_block.data, "data should not be empty"
         
         # Verify base64 is valid
@@ -326,7 +326,7 @@ def test_mcp_tool_response_image_content_format() -> None:
     """Test MCPToolResponse.to_mcp_content() returns correct format for images.
     
     Verifies the exact structure expected by MCP protocol:
-    - ImageContent blocks have correct type, mimeType, data fields
+    - ImageContent blocks have correct type, mime_type, data fields
     - Multiple content types (text + image) can coexist
     """
     from mcp import types
@@ -338,7 +338,7 @@ def test_mcp_tool_response_image_content_format() -> None:
     mock_image = types.ImageContent(
         type="image",
         data="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-        mimeType="image/png",
+        mime_type="image/png",
     )
     
     response = MCPToolResponse(
@@ -370,7 +370,7 @@ def test_mcp_tool_response_image_content_format() -> None:
     # Verify image block structure
     img = image_blocks[0]
     assert img.type == "image"
-    assert img.mimeType == "image/png"
+    assert img.mime_type == "image/png"
     assert img.data.startswith("iVBORw0KGgo")  # Base64 PNG header
 
 

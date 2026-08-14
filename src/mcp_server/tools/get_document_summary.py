@@ -16,13 +16,13 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mcp import types
 
 if TYPE_CHECKING:
-    from src.mcp_server.protocol_handler import ProtocolHandler
     from src.core.settings import Settings
+    from src.mcp_server.protocol_handler import ProtocolHandler
 
 logger = logging.getLogger(__name__)
 
@@ -588,7 +588,7 @@ class GetDocumentSummaryTool:
                         text=response_text,
                     )
                 ],
-                isError=False,
+                is_error=False,
             )
             
         except DocumentNotFoundError as e:
@@ -600,7 +600,7 @@ class GetDocumentSummaryTool:
                         text=self.format_error(e),
                     )
                 ],
-                isError=True,
+                is_error=True,
             )
             
         except Exception as e:
@@ -612,7 +612,7 @@ class GetDocumentSummaryTool:
                         text=self.format_error(e),
                     )
                 ],
-                isError=True,
+                is_error=True,
             )
 
 

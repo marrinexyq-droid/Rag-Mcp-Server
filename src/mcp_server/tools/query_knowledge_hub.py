@@ -17,13 +17,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mcp import types
 
-from src.core.response.response_builder import ResponseBuilder, MCPToolResponse
-from src.core.settings import load_settings, resolve_path, Settings
-from src.core.trace import TraceContext, TraceCollector
+from src.core.response.response_builder import MCPToolResponse, ResponseBuilder
+from src.core.settings import Settings, load_settings, resolve_path
+from src.core.trace import TraceCollector, TraceContext
 from src.core.types import RetrievalResult
 
 if TYPE_CHECKING:
@@ -162,11 +162,11 @@ class QueryKnowledgeHubTool:
         logger.info(f"Initializing query components for collection: {collection}")
         
         # Import here to avoid circular imports and allow lazy loading
-        from src.core.query_engine.query_processor import QueryProcessor
-        from src.core.query_engine.hybrid_search import create_hybrid_search
         from src.core.query_engine.dense_retriever import create_dense_retriever
-        from src.core.query_engine.sparse_retriever import create_sparse_retriever
+        from src.core.query_engine.hybrid_search import create_hybrid_search
+        from src.core.query_engine.query_processor import QueryProcessor
         from src.core.query_engine.reranker import create_core_reranker
+        from src.core.query_engine.sparse_retriever import create_sparse_retriever
         from src.ingestion.storage.bm25_indexer import BM25Indexer
         from src.libs.embedding.embedding_factory import EmbeddingFactory
         from src.libs.vector_store.vector_store_factory import VectorStoreFactory
@@ -404,7 +404,7 @@ class QueryKnowledgeHubTool:
         Returns:
             MCPToolResponse indicating error.
         """
-        content = f"## 查询失败\n\n"
+        content = "## 查询失败\n\n"
         content += f"查询: **{query}**\n"
         content += f"集合: `{collection}`\n\n"
         content += f"**错误信息:** {error_message}\n\n"
@@ -479,7 +479,7 @@ async def query_knowledge_hub_handler(
         
         return types.CallToolResult(
             content=content_blocks,
-            isError=response.is_empty and "error" in response.metadata,
+            is_error=response.is_empty and "error" in response.metadata,
         )
         
     except ValueError as e:
@@ -491,7 +491,7 @@ async def query_knowledge_hub_handler(
                     text=f"参数错误: {e}",
                 )
             ],
-            isError=True,
+            is_error=True,
         )
     except Exception as e:
         # Internal error
@@ -500,10 +500,10 @@ async def query_knowledge_hub_handler(
             content=[
                 types.TextContent(
                     type="text",
-                    text=f"内部错误: 查询处理失败",
+                    text="内部错误: 查询处理失败",
                 )
             ],
-            isError=True,
+            is_error=True,
         )
 
 

@@ -13,7 +13,6 @@ from __future__ import annotations
 import base64
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,7 +27,6 @@ from src.core.response.multimodal_assembler import (
     MultimodalAssembler,
 )
 from src.core.types import RetrievalResult
-
 
 # =============================================================================
 # Fixtures
@@ -207,7 +205,7 @@ class TestImageContent:
         assert isinstance(mcp_content, types.ImageContent)
         assert mcp_content.type == "image"
         assert mcp_content.data == "iVBORw0KGgo="
-        assert mcp_content.mimeType == "image/png"
+        assert mcp_content.mime_type == "image/png"
     
     def test_to_dict(self):
         """Test serialization to dictionary."""
@@ -482,8 +480,8 @@ class TestResolveImagePath:
         with patch.object(Path, "exists") as mock_exists:
             mock_exists.return_value = True
             # This test is simplified - in real code would check actual path
-            resolved = assembler.resolve_image_path(ref, collection=collection)
-        
+            _resolved = assembler.resolve_image_path(ref, collection=collection)
+
         # Path should be attempted with collection
         # Actual resolution depends on filesystem state
     

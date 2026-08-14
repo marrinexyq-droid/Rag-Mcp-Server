@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any, List, Optional
 
+from src.libs.embedding._config import optional_integer, optional_string
 from src.libs.embedding.base_embedding import BaseEmbedding
 
 
@@ -61,38 +62,39 @@ class OpenAIEmbedding(BaseEmbedding):
             constructs the Azure-compatible OpenAI URL and uses api-key auth.
         """
         self.model = settings.embedding.model
-        
+
         # Extract optional dimensions setting
-        self.dimensions = getattr(settings.embedding, 'dimensions', None)
-        
-        # API key: explicit > settings > env var
-        self.api_key = (
+        self.dimensions = optional_integer(settings.embedding, "dimensions")
+
+        # API key: explicit > environment > settings.
+        resolved_api_key = (
             api_key
-            or getattr(settings.embedding, 'api_key', None)
             or os.environ.get("OPENAI_API_KEY")
+            or optional_string(settings.embedding, "api_key")
         )
-        if not self.api_key:
+        if not resolved_api_key:
             raise ValueError(
                 "OpenAI API key not provided. Set in settings.yaml (embedding.api_key), "
                 "OPENAI_API_KEY environment variable, or pass api_key parameter."
             )
+        self.api_key = resolved_api_key
         
         # Azure-compatible mode detection
-        azure_endpoint = getattr(settings.embedding, 'azure_endpoint', None)
-        self.api_version = getattr(settings.embedding, 'api_version', None)
+        azure_endpoint = optional_string(settings.embedding, "azure_endpoint")
+        self.api_version = optional_string(settings.embedding, "api_version")
         self._use_azure_auth = False
         
         if base_url:
             self.base_url = base_url
         elif azure_endpoint:
             # Azure-compatible mode: construct deployment-based URL
-            deployment = getattr(settings.embedding, 'deployment_name', None) or self.model
+            deployment = optional_string(settings.embedding, "deployment_name") or self.model
             self.base_url = f"{azure_endpoint.rstrip('/')}/openai/deployments/{deployment}"
             self._use_azure_auth = True
             if not self.api_version:
                 self.api_version = "2024-02-15-preview"
         else:
-            settings_base_url = getattr(settings.embedding, 'base_url', None)
+            settings_base_url = optional_string(settings.embedding, "base_url")
             self.base_url = settings_base_url if settings_base_url else self.DEFAULT_BASE_URL
         
         # Store any additional kwargs for future use
@@ -132,7 +134,7 @@ class OpenAIEmbedding(BaseEmbedding):
             ) from e
         
         # Initialize OpenAI client
-        client_kwargs = {
+        client_kwargs: dict[str, Any] = {
             "api_key": self.api_key,
             "base_url": self.base_url,
         }
@@ -144,7 +146,7 @@ class OpenAIEmbedding(BaseEmbedding):
         client = OpenAI(**client_kwargs)
         
         # Prepare API call parameters
-        api_params = {
+        api_params: dict[str, Any] = {
             "input": texts,
             "model": self.model,
         }

@@ -10,10 +10,10 @@ Tests cover:
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp import types
+from mcp.shared.exceptions import MCPError
 
 from src.mcp_server.protocol_handler import (
     JSONRPCErrorCodes,
@@ -22,7 +22,6 @@ from src.mcp_server.protocol_handler import (
     create_mcp_server,
     get_protocol_handler,
 )
-
 
 # ============================================================================
 # Fixtures
@@ -193,7 +192,7 @@ class TestGetToolSchemas:
         assert isinstance(schemas[0], types.Tool)
         assert schemas[0].name == "query_knowledge_hub"
         assert schemas[0].description == "Query the knowledge hub"
-        assert schemas[0].inputSchema == sample_tool_schema
+        assert schemas[0].input_schema == sample_tool_schema
 
 
 # ============================================================================
@@ -225,7 +224,7 @@ class TestExecuteTool:
         )
 
         assert isinstance(result, types.CallToolResult)
-        assert result.isError is False
+        assert result.is_error is False
         assert len(result.content) == 1
         assert isinstance(result.content[0], types.TextContent)
         assert result.content[0].text == "Found 3 results for: test query"
@@ -239,7 +238,7 @@ class TestExecuteTool:
         async def handler(query: str, top_k: int = 5) -> types.CallToolResult:
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text="Custom result")],
-                isError=False,
+                is_error=False,
             )
 
         protocol_handler.register_tool(
@@ -280,23 +279,23 @@ class TestExecuteTool:
         assert result.content[1].text == "Result 2"
 
     @pytest.mark.asyncio
-    async def test_execute_unknown_tool_returns_error(
+    async def test_execute_unknown_tool_raises_method_not_found(
         self, protocol_handler: ProtocolHandler
     ) -> None:
-        """Should return error result for unknown tool."""
-        result = await protocol_handler.execute_tool(
-            "nonexistent_tool", {"arg": "value"}
-        )
+        """Should map an unknown tool to JSON-RPC method-not-found."""
+        with pytest.raises(MCPError) as exc_info:
+            await protocol_handler.execute_tool(
+                "nonexistent_tool", {"arg": "value"}
+            )
 
-        assert isinstance(result, types.CallToolResult)
-        assert result.isError is True
-        assert "not found" in result.content[0].text.lower()
+        assert exc_info.value.code == JSONRPCErrorCodes.METHOD_NOT_FOUND
+        assert "not found" in exc_info.value.message.lower()
 
     @pytest.mark.asyncio
     async def test_execute_tool_with_invalid_params(
         self, protocol_handler: ProtocolHandler, sample_tool_schema: Dict[str, Any]
     ) -> None:
-        """Should return error for invalid parameters."""
+        """Should map invalid handler arguments to JSON-RPC invalid-params."""
 
         async def handler(query: str, top_k: int = 5) -> str:
             return f"Results for {query}"
@@ -309,18 +308,19 @@ class TestExecuteTool:
         )
 
         # Call with unexpected keyword argument
-        result = await protocol_handler.execute_tool(
-            "search", {"query": "test", "invalid_param": "value"}
-        )
+        with pytest.raises(MCPError) as exc_info:
+            await protocol_handler.execute_tool(
+                "search", {"query": "test", "invalid_param": "value"}
+            )
 
-        assert result.isError is True
-        assert "invalid" in result.content[0].text.lower()
+        assert exc_info.value.code == JSONRPCErrorCodes.INVALID_PARAMS
+        assert "invalid" in exc_info.value.message.lower()
 
     @pytest.mark.asyncio
     async def test_execute_tool_internal_error(
         self, protocol_handler: ProtocolHandler, sample_tool_schema: Dict[str, Any]
     ) -> None:
-        """Should return generic error without leaking stack trace."""
+        """Should map failures to a generic JSON-RPC internal error."""
 
         async def handler(query: str, top_k: int = 5) -> str:
             raise RuntimeError("Database connection failed")
@@ -332,12 +332,35 @@ class TestExecuteTool:
             handler=handler,
         )
 
-        result = await protocol_handler.execute_tool("search", {"query": "test"})
+        with pytest.raises(MCPError) as exc_info:
+            await protocol_handler.execute_tool("search", {"query": "test"})
 
-        assert result.isError is True
-        assert "internal" in result.content[0].text.lower()
+        assert exc_info.value.code == JSONRPCErrorCodes.INTERNAL_ERROR
+        assert "internal" in exc_info.value.message.lower()
         # Should NOT leak the actual error message
-        assert "database" not in result.content[0].text.lower()
+        assert "database" not in exc_info.value.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_handler_type_error_is_internal_error(
+        self, protocol_handler: ProtocolHandler, sample_tool_schema: Dict[str, Any]
+    ) -> None:
+        """A TypeError raised inside a valid handler is not invalid params."""
+
+        async def handler(query: str, top_k: int = 5) -> str:
+            raise TypeError("provider returned an invalid payload")
+
+        protocol_handler.register_tool(
+            name="search",
+            description="Search tool",
+            input_schema=sample_tool_schema,
+            handler=handler,
+        )
+
+        with pytest.raises(MCPError) as exc_info:
+            await protocol_handler.execute_tool("search", {"query": "test"})
+
+        assert exc_info.value.code == JSONRPCErrorCodes.INTERNAL_ERROR
+        assert "provider" not in exc_info.value.message.lower()
 
 
 # ============================================================================
@@ -474,7 +497,12 @@ class TestServerProtocolHandlerIntegration:
             handler=search_handler,
         )
 
-        server = create_mcp_server("test-server", "1.0.0", protocol_handler=handler)
+        _server = create_mcp_server(
+            "test-server",
+            "1.0.0",
+            protocol_handler=handler,
+            register_tools=False,
+        )
 
         # Verify tools are accessible through protocol handler
         tools = handler.get_tool_schemas()
@@ -501,10 +529,15 @@ class TestServerProtocolHandlerIntegration:
             handler=search_handler,
         )
 
-        server = create_mcp_server("test-server", "1.0.0", protocol_handler=handler)
+        _server = create_mcp_server(
+            "test-server",
+            "1.0.0",
+            protocol_handler=handler,
+            register_tools=False,
+        )
 
         # Execute through protocol handler
         result = await handler.execute_tool("search", {"query": "test", "top_k": 10})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert "Found 10 results for: test" in result.content[0].text

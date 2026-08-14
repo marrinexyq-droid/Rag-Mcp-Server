@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any, List, Optional
 
+from src.libs.embedding._config import optional_integer, optional_string
 from src.libs.embedding.base_embedding import BaseEmbedding
 
 
@@ -62,42 +63,46 @@ class AzureEmbedding(BaseEmbedding):
         # Azure uses 'deployment_name' instead of 'model'
         # Try settings.embedding.deployment_name first, fallback to model
         self.deployment_name = (
-            getattr(settings.embedding, 'deployment_name', None) or 
+            optional_string(settings.embedding, "deployment_name") or
             settings.embedding.model
         )
-        
+
         # Extract optional dimensions setting
-        self.dimensions = getattr(settings.embedding, 'dimensions', None)
-        
-        # API key: explicit parameter > settings.yaml > env var (fallback for backward compatibility)
-        self.api_key = (
-            api_key or 
-            getattr(settings.embedding, 'api_key', None) or
+        self.dimensions = optional_integer(settings.embedding, "dimensions")
+
+        # API key: explicit parameter > environment > settings.yaml.
+        resolved_api_key = (
+            api_key or
             os.environ.get("AZURE_OPENAI_API_KEY") or
-            os.environ.get("OPENAI_API_KEY")
+            os.environ.get("OPENAI_API_KEY") or
+            optional_string(settings.embedding, "api_key")
         )
-        if not self.api_key:
+        if not resolved_api_key:
             raise ValueError(
                 "Azure OpenAI API key not provided. Configure 'api_key' in settings.yaml, "
                 "set AZURE_OPENAI_API_KEY environment variable, or pass api_key parameter."
             )
-        
-        # Azure endpoint: explicit parameter > settings.yaml > env var (fallback)
-        self.azure_endpoint = (
+        self.api_key = resolved_api_key
+
+        # Azure endpoint: explicit parameter > environment > settings.yaml.
+        # Environment wins so one deployment can safely reuse a checked-in
+        # non-secret config across local and hosted environments.
+        resolved_endpoint = (
             azure_endpoint or
-            getattr(settings.embedding, 'azure_endpoint', None) or
-            os.environ.get("AZURE_OPENAI_ENDPOINT")
+            os.environ.get("AZURE_OPENAI_ENDPOINT") or
+            optional_string(settings.embedding, "azure_endpoint")
         )
-        if not self.azure_endpoint:
+        if not resolved_endpoint:
             raise ValueError(
                 "Azure OpenAI endpoint not provided. Configure 'azure_endpoint' in settings.yaml, "
                 "set AZURE_OPENAI_ENDPOINT environment variable, or pass azure_endpoint parameter."
             )
+        self.azure_endpoint = resolved_endpoint
         
         # API version: explicit > settings > default
         self.api_version = (
             api_version or
-            getattr(settings.embedding, 'api_version', None) or
+            optional_string(settings.embedding, "api_version") or
             self.DEFAULT_API_VERSION
         )
         
@@ -146,7 +151,7 @@ class AzureEmbedding(BaseEmbedding):
         
         # Prepare API call parameters
         # Azure uses 'model' parameter but expects deployment name
-        api_params = {
+        api_params: dict[str, Any] = {
             "input": texts,
             "model": self.deployment_name,
         }

@@ -32,8 +32,8 @@ class TraceContext:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     # internal monotonic clock for accurate elapsed calculation
-    _start_mono: float = field(default_factory=time.monotonic, repr=False)
-    _finish_mono: Optional[float] = field(default=None, repr=False)
+    _start_mono_ns: int = field(default_factory=time.perf_counter_ns, repr=False)
+    _finish_mono_ns: int | None = field(default=None, repr=False)
     _stage_timings: Dict[str, float] = field(default_factory=dict, repr=False)
 
     # ---- recording ---------------------------------------------------
@@ -67,7 +67,7 @@ class TraceContext:
 
     def finish(self) -> None:
         """Mark the trace as finished and record wall-clock end time."""
-        self._finish_mono = time.monotonic()
+        self._finish_mono_ns = time.perf_counter_ns()
         self.finished_at = datetime.now(timezone.utc).isoformat()
 
     # ---- timing helpers -----------------------------------------------
@@ -92,8 +92,15 @@ class TraceContext:
                 raise KeyError(f"Stage '{stage_name}' has no recorded timing")
             return self._stage_timings[stage_name]
 
-        end = self._finish_mono if self._finish_mono is not None else time.monotonic()
-        return (end - self._start_mono) * 1000.0
+        end_ns = (
+            self._finish_mono_ns
+            if self._finish_mono_ns is not None
+            else time.perf_counter_ns()
+        )
+        # A completed observation is conceptually positive even when it fits
+        # inside one platform clock tick.
+        elapsed_ns = max(end_ns - self._start_mono_ns, 1)
+        return elapsed_ns / 1_000_000
 
     # ---- serialisation ------------------------------------------------
 

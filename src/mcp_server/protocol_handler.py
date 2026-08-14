@@ -9,10 +9,12 @@ This module provides the ProtocolHandler class that encapsulates:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from inspect import signature
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from mcp import types
 from mcp.server.lowlevel import Server
+from mcp.shared.exceptions import MCPError
 
 from src.observability.logger import get_logger
 
@@ -94,13 +96,13 @@ class ProtocolHandler:
         """Get list of tool schemas for tools/list response.
 
         Returns:
-            List of Tool objects with name, description, and inputSchema.
+            List of Tool objects with name, description, and input schema.
         """
         return [
             types.Tool(
                 name=tool.name,
                 description=tool.description,
-                inputSchema=tool.input_schema,
+                input_schema=tool.input_schema,
             )
             for tool in self.tools.values()
         ]
@@ -115,24 +117,38 @@ class ProtocolHandler:
             arguments: Arguments to pass to the tool handler.
 
         Returns:
-            CallToolResult with content blocks or error indication.
+            CallToolResult with content blocks for a successful tool execution.
 
         Raises:
-            ValueError: If tool is not found.
+            MCPError: If the tool is unknown, its parameters are invalid, or
+                execution fails internally.
         """
         if name not in self.tools:
             self._logger.warning("Tool not found: %s", name)
-            return types.CallToolResult(
-                content=[
-                    types.TextContent(
-                        type="text",
-                        text=f"Error: Tool '{name}' not found",
-                    )
-                ],
-                isError=True,
+            raise MCPError(
+                code=JSONRPCErrorCodes.METHOD_NOT_FOUND,
+                message=f"Tool '{name}' not found",
             )
 
         tool = self.tools[name]
+
+        # Validate invocation shape before execution so a TypeError raised by
+        # valid tool code is classified as an internal error, not bad params.
+        try:
+            handler_signature = signature(tool.handler)
+        except (TypeError, ValueError):
+            handler_signature = None
+
+        if handler_signature is not None:
+            try:
+                handler_signature.bind(**arguments)
+            except TypeError:
+                self._logger.warning("Invalid params for tool %s", name)
+                raise MCPError(
+                    code=JSONRPCErrorCodes.INVALID_PARAMS,
+                    message=f"Invalid parameters for tool '{name}'",
+                ) from None
+
         try:
             self._logger.info("Executing tool: %s", name)
             result = await tool.handler(**arguments)
@@ -143,40 +159,25 @@ class ProtocolHandler:
             if isinstance(result, str):
                 return types.CallToolResult(
                     content=[types.TextContent(type="text", text=result)],
-                    isError=False,
+                    is_error=False,
                 )
             if isinstance(result, list):
-                return types.CallToolResult(content=result, isError=False)
+                return types.CallToolResult(content=result, is_error=False)
             # Default: convert to string
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=str(result))],
-                isError=False,
+                is_error=False,
             )
 
-        except TypeError as e:
-            # Invalid parameters
-            self._logger.error("Invalid params for tool %s: %s", name, e)
-            return types.CallToolResult(
-                content=[
-                    types.TextContent(
-                        type="text",
-                        text=f"Error: Invalid parameters - {e}",
-                    )
-                ],
-                isError=True,
-            )
-        except Exception as e:
+        except MCPError:
+            raise
+        except Exception:
             # Internal error - don't leak stack trace
             self._logger.exception("Internal error executing tool %s", name)
-            return types.CallToolResult(
-                content=[
-                    types.TextContent(
-                        type="text",
-                        text=f"Error: Internal server error while executing '{name}'",
-                    )
-                ],
-                isError=True,
-            )
+            raise MCPError(
+                code=JSONRPCErrorCodes.INTERNAL_ERROR,
+                message=f"Internal server error while executing '{name}'",
+            ) from None
 
     def get_capabilities(self) -> Dict[str, Any]:
         """Get server capabilities for initialize response.
@@ -195,17 +196,27 @@ def _register_default_tools(protocol_handler: ProtocolHandler) -> None:
     Args:
         protocol_handler: ProtocolHandler instance to register tools with.
     """
-    # Import and register query_knowledge_hub tool
-    from src.mcp_server.tools.query_knowledge_hub import register_tool as register_query_tool
-    register_query_tool(protocol_handler)
-    
-    # Import and register list_collections tool
-    from src.mcp_server.tools.list_collections import register_tool as register_list_tool
-    register_list_tool(protocol_handler)
-    
-    # Import and register get_document_summary tool
-    from src.mcp_server.tools.get_document_summary import register_tool as register_summary_tool
-    register_summary_tool(protocol_handler)
+    # Explicitly supplied tools override defaults with the same public name.
+    if "query_knowledge_hub" not in protocol_handler.tools:
+        from src.mcp_server.tools.query_knowledge_hub import (
+            register_tool as register_query_tool,
+        )
+
+        register_query_tool(protocol_handler)
+
+    if "list_collections" not in protocol_handler.tools:
+        from src.mcp_server.tools.list_collections import (
+            register_tool as register_list_tool,
+        )
+
+        register_list_tool(protocol_handler)
+
+    if "get_document_summary" not in protocol_handler.tools:
+        from src.mcp_server.tools.get_document_summary import (
+            register_tool as register_summary_tool,
+        )
+
+        register_summary_tool(protocol_handler)
 
 
 def create_mcp_server(
@@ -239,22 +250,30 @@ def create_mcp_server(
     if register_tools:
         _register_default_tools(protocol_handler)
 
-    # Create low-level server
-    server = Server(server_name)
+    async def handle_list_tools(
+        _context: Any,
+        _params: types.PaginatedRequestParams | None,
+    ) -> types.ListToolsResult:
+        """Handle a MCP 2.0 ``tools/list`` request."""
+        return types.ListToolsResult(tools=protocol_handler.get_tool_schemas())
 
-    # Register tools/list handler
-    @server.list_tools()
-    async def handle_list_tools() -> List[types.Tool]:
-        """Handle tools/list request."""
-        return protocol_handler.get_tool_schemas()
-
-    # Register tools/call handler
-    @server.call_tool()
     async def handle_call_tool(
-        name: str, arguments: Dict[str, Any]
+        _context: Any,
+        params: types.CallToolRequestParams,
     ) -> types.CallToolResult:
-        """Handle tools/call request."""
-        return await protocol_handler.execute_tool(name, arguments)
+        """Handle a MCP 2.0 ``tools/call`` request."""
+        return await protocol_handler.execute_tool(
+            params.name,
+            params.arguments or {},
+        )
+
+    # MCP 2.0 registers low-level handlers through constructor callbacks.
+    server = Server(
+        server_name,
+        version=server_version,
+        on_list_tools=handle_list_tools,
+        on_call_tool=handle_call_tool,
+    )
 
     # Store protocol handler on server for access
     server._protocol_handler = protocol_handler  # type: ignore[attr-defined]
@@ -274,4 +293,4 @@ def get_protocol_handler(server: Server) -> ProtocolHandler:
     Raises:
         AttributeError: If server was not created with create_mcp_server.
     """
-    return server._protocol_handler  # type: ignore[attr-defined]
+    return cast(ProtocolHandler, server._protocol_handler)  # type: ignore[attr-defined]

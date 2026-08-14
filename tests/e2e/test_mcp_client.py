@@ -376,11 +376,9 @@ class TestMCPClientE2E:
 
         call_resp = _find(responses, 2)
         assert call_resp is not None, f"Missing tools/call response. Got: {responses}"
-        assert "result" in call_resp
-
-        result = call_resp["result"]
-        assert "content" in result
-        assert result.get("isError") is True or "error" in result["content"][0].get("text", "").lower()
+        assert "error" in call_resp
+        assert call_resp["error"]["code"] == -32601
+        assert "not found" in call_resp["error"]["message"].lower()
 
     # ------------------------------------------------------------------
     # 6. Full session: list tools → call query → verify citations format

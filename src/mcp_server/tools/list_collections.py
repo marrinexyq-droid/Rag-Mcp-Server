@@ -15,13 +15,13 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from mcp import types
 
 if TYPE_CHECKING:
-    from src.mcp_server.protocol_handler import ProtocolHandler
     from src.core.settings import Settings
+    from src.mcp_server.protocol_handler import ProtocolHandler
 
 logger = logging.getLogger(__name__)
 
@@ -288,7 +288,8 @@ class ListCollectionsTool:
             # Run blocking ChromaDB I/O in a thread to avoid blocking
             # the async event loop / MCP stdio transport
             collections = await asyncio.to_thread(
-                self.list_collections, include_stats,
+                self.list_collections,
+                include_stats=include_stats,
             )
             response_text = self.format_response(collections)
             
@@ -299,7 +300,7 @@ class ListCollectionsTool:
                         text=response_text,
                     )
                 ],
-                isError=False,
+                is_error=False,
             )
             
         except Exception as e:
@@ -311,7 +312,7 @@ class ListCollectionsTool:
                         text=f"Error listing collections: {str(e)}",
                     )
                 ],
-                isError=True,
+                is_error=True,
             )
 
 

@@ -4,21 +4,21 @@ This module tests the ListCollectionsTool class that provides
 collection listing capabilities through the MCP protocol.
 """
 
-import pytest
-from typing import Dict, Any, List
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from pathlib import Path
+from typing import List
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from src.mcp_server.tools.list_collections import (
-    ListCollectionsTool,
-    ListCollectionsConfig,
-    CollectionInfo,
-    TOOL_NAME,
     TOOL_DESCRIPTION,
     TOOL_INPUT_SCHEMA,
+    TOOL_NAME,
+    CollectionInfo,
+    ListCollectionsConfig,
+    ListCollectionsTool,
     register_tool,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -546,7 +546,7 @@ class TestExecuteMethod:
         ):
             result = await tool_with_config.execute(include_stats=True)
         
-        assert result.isError is False
+        assert result.is_error is False
         assert len(result.content) == 1
         assert result.content[0].type == "text"
         assert "Available Collections (3 total)" in result.content[0].text
@@ -560,7 +560,7 @@ class TestExecuteMethod:
         with patch.object(tool_with_config, 'list_collections', return_value=[]):
             result = await tool_with_config.execute()
         
-        assert result.isError is False
+        assert result.is_error is False
         assert "No collections found" in result.content[0].text
     
     @pytest.mark.asyncio
@@ -576,7 +576,7 @@ class TestExecuteMethod:
         ):
             result = await tool_with_config.execute()
         
-        assert result.isError is True
+        assert result.is_error is True
         assert "Error listing collections" in result.content[0].text
     
     @pytest.mark.asyncio

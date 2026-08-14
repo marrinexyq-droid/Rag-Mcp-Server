@@ -4,22 +4,21 @@ This module tests the GetDocumentSummaryTool class that provides
 document summary retrieval capabilities through the MCP protocol.
 """
 
+from typing import Any, Dict, List
+from unittest.mock import Mock, patch
+
 import pytest
-from typing import Dict, Any, List
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
-from pathlib import Path
 
 from src.mcp_server.tools.get_document_summary import (
-    GetDocumentSummaryTool,
-    GetDocumentSummaryConfig,
-    DocumentSummary,
-    DocumentNotFoundError,
-    TOOL_NAME,
     TOOL_DESCRIPTION,
     TOOL_INPUT_SCHEMA,
+    TOOL_NAME,
+    DocumentNotFoundError,
+    DocumentSummary,
+    GetDocumentSummaryConfig,
+    GetDocumentSummaryTool,
     register_tool,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -860,7 +859,7 @@ class TestExecuteMethod:
         
         result = await tool_with_config.execute(doc_id="doc_abc123")
         
-        assert result.isError is False
+        assert result.is_error is False
         assert len(result.content) == 1
         assert result.content[0].type == "text"
         assert "Test Document Title" in result.content[0].text
@@ -879,7 +878,7 @@ class TestExecuteMethod:
         
         result = await tool_with_config.execute(doc_id="nonexistent")
         
-        assert result.isError is True
+        assert result.is_error is True
         assert "Not Found" in result.content[0].text
     
     @pytest.mark.asyncio
@@ -905,7 +904,7 @@ class TestExecuteMethod:
             collection="custom_collection"
         )
         
-        assert result.isError is False
+        assert result.is_error is False
         # Verify _get_collection was called (via _find_document_chunks)
         mock_get_collection.assert_called()
 

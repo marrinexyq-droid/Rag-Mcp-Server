@@ -16,14 +16,13 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from mcp import types
 
 from src.core.types import RetrievalResult
-
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +107,7 @@ class ImageContent:
         return types.ImageContent(
             type="image",
             data=self.data,
-            mimeType=self.mime_type,
+            mime_type=self.mime_type,
         )
     
     def to_dict(self) -> Dict[str, Any]:

@@ -13,8 +13,9 @@ and deterministic.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, PropertyMock
-from typing import Any, Dict
+from types import SimpleNamespace
+from typing import Dict
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -184,6 +185,48 @@ class TestRagasEvaluatorEvaluate:
 
         assert result == expected_scores
         evaluator._run_ragas.assert_called_once()
+
+    def test_evaluate_invokes_ragas_04_metrics_with_mock_llm(self) -> None:
+        """Exercise the real Ragas 0.4 metric dispatch without network calls."""
+        from src.observability.evaluation.ragas_evaluator import RagasEvaluator
+
+        evaluator = RagasEvaluator(metrics=["faithfulness", "answer_relevancy"])
+        mock_llm = MagicMock(name="ragas_llm")
+        mock_embeddings = MagicMock(name="ragas_embeddings")
+
+        with (
+            patch.object(
+                evaluator,
+                "_build_wrappers",
+                return_value=(mock_llm, mock_embeddings),
+            ),
+            patch("ragas.metrics.collections.Faithfulness") as faithfulness,
+            patch("ragas.metrics.collections.AnswerRelevancy") as relevancy,
+        ):
+            faithfulness.return_value.score.return_value = SimpleNamespace(value=0.91)
+            relevancy.return_value.score.return_value = SimpleNamespace(value=0.87)
+
+            result = evaluator.evaluate(
+                query="What is RAG?",
+                retrieved_chunks=[{"text": "RAG uses retrieved context."}],
+                generated_answer="RAG augments generation with retrieval.",
+            )
+
+        assert result == {"faithfulness": 0.91, "answer_relevancy": 0.87}
+        faithfulness.assert_called_once_with(llm=mock_llm)
+        faithfulness.return_value.score.assert_called_once_with(
+            user_input="What is RAG?",
+            response="RAG augments generation with retrieval.",
+            retrieved_contexts=["RAG uses retrieved context."],
+        )
+        relevancy.assert_called_once_with(
+            llm=mock_llm,
+            embeddings=mock_embeddings,
+        )
+        relevancy.return_value.score.assert_called_once_with(
+            user_input="What is RAG?",
+            response="RAG augments generation with retrieval.",
+        )
 
     def test_evaluate_runtime_error_on_ragas_failure(self) -> None:
         from src.observability.evaluation.ragas_evaluator import RagasEvaluator

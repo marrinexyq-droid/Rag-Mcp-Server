@@ -81,9 +81,13 @@ class TraceService:
         for s in stages:
             # The raw stage dict has: stage, timestamp, data (dict), elapsed_ms
             # Extract the inner 'data' dict directly rather than flattening
-            stage_data = s.get("data", {})
-            if not isinstance(stage_data, dict):
-                stage_data = {}
+            nested_data = s.get("data", {})
+            stage_data = dict(nested_data) if isinstance(nested_data, dict) else {}
+            # Older trace records stored stage-specific fields at the top level.
+            # Preserve them while normalising both layouts for the dashboard.
+            for key, value in s.items():
+                if key not in {"stage", "timestamp", "elapsed_ms", "data"}:
+                    stage_data.setdefault(key, value)
             timings.append(
                 {
                     "stage_name": s.get("stage"),

@@ -78,11 +78,12 @@ class BaseEmbedding(ABC):
                     "Embedding providers typically reject empty strings."
                 )
     
-    def get_dimension(self) -> int:
+    def get_dimension(self) -> int | None:
         """Get the dimensionality of embeddings produced by this provider.
         
         Returns:
-            The vector dimension (e.g., 1536 for OpenAI text-embedding-3-small).
+            The vector dimension, or ``None`` when it cannot be determined
+            from provider configuration.
         
         Raises:
             NotImplementedError: If the subclass doesn't override this method.
