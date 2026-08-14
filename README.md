@@ -2,14 +2,14 @@
 
 这是我维护的本地知识库项目：把 PDF 文档摄取为可检索的向量与关键词索引，再通过命令行或 MCP 工具提供混合检索能力。
 
-当前版本以 Windows 本地开发为主，使用 Chroma 持久化向量数据、Ollama 生成 Embedding，并支持在多个 OpenAI 兼容的 LLM API 配置之间切换。默认配置已接入 VectorEngine 中转站，API Key 只从环境变量读取。
+当前版本以 Windows 本地开发为主，使用 Chroma 持久化向量数据、Ollama 生成 Embedding，并支持在多个 LLM API 配置之间切换。默认使用 DeepSeek 官方 API 直连，同时保留 VectorEngine 中转方案；所有 API Key 都只从环境变量读取。
 
 > 项目仍处于 `0.1.0` Alpha 阶段。当前仓库是我在开源项目基础上维护和扩展的个人版本，来源与许可见 [NOTICE.md](NOTICE.md)。
 
 ## 我在这个版本中完成的内容
 
 - 增加可选择的 LLM Profile：一个配置文件可以保存多个 API 方案。
-- 配置 VectorEngine OpenAI 兼容端点，并保留 DeepSeek 直连方案。
+- 配置并验证 DeepSeek 官方 API 直连，同时保留 VectorEngine OpenAI 兼容端点。
 - 将不同 Profile 的密钥映射到独立环境变量，避免把 Key 写进仓库。
 - 使用本地 Ollama `nomic-embed-text` 生成 768 维向量。
 - 保留 Dense、BM25、RRF 混合检索和可选重排能力。
@@ -48,18 +48,7 @@ python -m pip install -e ".[dev]"
 ollama pull nomic-embed-text
 ```
 
-设置 VectorEngine Key。这里的值只进入当前用户的环境变量，不要把真实 Key 写入 YAML、提交记录或 Issue。
-
-```powershell
-[Environment]::SetEnvironmentVariable(
-  "VECTORENGINE_API_KEY",
-  "你的 API Key",
-  "User"
-)
-$env:VECTORENGINE_API_KEY = "你的 API Key"
-```
-
-如果改用 DeepSeek 直连：
+设置 DeepSeek Key。这里的值只进入当前用户的环境变量，不要把真实 Key 写入 YAML、提交记录或 Issue。
 
 ```powershell
 [Environment]::SetEnvironmentVariable(
@@ -70,13 +59,24 @@ $env:VECTORENGINE_API_KEY = "你的 API Key"
 $env:DEEPSEEK_API_KEY = "你的 API Key"
 ```
 
+如果改用 VectorEngine 中转：
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  "VECTORENGINE_API_KEY",
+  "你的 API Key",
+  "User"
+)
+$env:VECTORENGINE_API_KEY = "你的 API Key"
+```
+
 ## 多 API Profile
 
 LLM 配置位于 [`config/settings.yaml`](config/settings.yaml)：
 
 ```yaml
 llm:
-  active_profile: "vectorengine"
+  active_profile: "deepseek-direct"
   temperature: 0.0
   max_tokens: 4096
   profiles:
@@ -160,7 +160,7 @@ python -m pytest tests/unit/test_config_loading.py tests/unit/test_llm_profiles.
 python -m pytest tests/unit -m "not llm"
 ```
 
-需要真实调用 API 的测试会产生费用，因此默认开发验证应优先运行不依赖外部服务的测试。VectorEngine 当前已验证可以访问模型列表；聊天调用仍取决于账户余额与模型配额。
+需要真实调用 API 的测试会产生费用，因此默认开发验证应优先运行不依赖外部服务的测试。DeepSeek 直连已完成真实聊天验证；VectorEngine 已验证可以访问模型列表，但聊天调用仍取决于中转账户余额与模型配额。
 
 ## 项目管理
 

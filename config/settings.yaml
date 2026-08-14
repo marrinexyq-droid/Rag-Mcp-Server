@@ -6,7 +6,7 @@
 # LLM Configuration
 # =============================================================================
 llm:
-  active_profile: "vectorengine"
+  active_profile: "deepseek-direct"
   temperature: 0.0
   max_tokens: 4096
   profiles:
@@ -17,7 +17,7 @@ llm:
       api_key_env: "VECTORENGINE_API_KEY"
       model: "deepseek-v4-flash"
 
-    # Direct DeepSeek fallback. Switch active_profile to "deepseek-direct" to use it.
+    # Direct DeepSeek connection (current active profile).
     deepseek-direct:
       provider: "deepseek"
       base_url: "https://api.deepseek.com"
