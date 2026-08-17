@@ -28,11 +28,12 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROTOCOL_TEST_SERVER = PROJECT_ROOT / "tests" / "fixtures" / "mcp_protocol_server.py"
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
 
-def _start_server() -> subprocess.Popen:
+def _start_server(command: List[str] | None = None) -> subprocess.Popen:
     """Start the MCP server subprocess with stdio transport.
 
     Returns:
@@ -41,7 +42,7 @@ def _start_server() -> subprocess.Popen:
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.Popen(
-        [sys.executable, "-m", "src.mcp_server.server"],
+        command or [sys.executable, "-m", "src.mcp_server.server"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -156,6 +157,14 @@ def mcp_server():
     _terminate(proc)
 
 
+@pytest.fixture()
+def protocol_mcp_server():
+    """Yield a deterministic in-memory MCP server over real stdio."""
+    proc = _start_server([sys.executable, str(PROTOCOL_TEST_SERVER)])
+    yield proc
+    _terminate(proc)
+
+
 # ── Tests ─────────────────────────────────────────────────────────────
 
 
@@ -216,6 +225,7 @@ class TestMCPClientE2E:
     # ------------------------------------------------------------------
 
     @pytest.mark.e2e
+    @pytest.mark.external
     def test_tools_call_query_knowledge_hub(
         self, mcp_server: subprocess.Popen
     ) -> None:
@@ -271,6 +281,7 @@ class TestMCPClientE2E:
     # ------------------------------------------------------------------
 
     @pytest.mark.e2e
+    @pytest.mark.external
     def test_tools_call_list_collections(
         self, mcp_server: subprocess.Popen
     ) -> None:
@@ -310,6 +321,7 @@ class TestMCPClientE2E:
     # ------------------------------------------------------------------
 
     @pytest.mark.e2e
+    @pytest.mark.external
     def test_tools_call_get_document_summary_missing(
         self, mcp_server: subprocess.Popen
     ) -> None:
@@ -385,6 +397,7 @@ class TestMCPClientE2E:
     # ------------------------------------------------------------------
 
     @pytest.mark.e2e
+    @pytest.mark.external
     def test_full_session_query_with_citations_format(
         self, mcp_server: subprocess.Popen
     ) -> None:
@@ -466,45 +479,47 @@ class TestMCPClientE2E:
 
     @pytest.mark.e2e
     def test_multiple_tool_calls_same_session(
-        self, mcp_server: subprocess.Popen
+        self, protocol_mcp_server: subprocess.Popen
     ) -> None:
-        """Server handles multiple tools/call invocations in one session."""
+        """Every tool call receives its matching response in one session."""
         messages = [
             INIT_REQUEST,
             INITIALIZED_NOTIFICATION,
-            # Call 1: list_collections
             {
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "list_collections",
-                    "arguments": {"include_stats": False},
+                    "name": "echo",
+                    "arguments": {"value": "first", "delay_ms": 30},
                 },
             },
-            # Call 2: query_knowledge_hub
             {
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
                 "params": {
-                    "name": "query_knowledge_hub",
-                    "arguments": {"query": "test query", "top_k": 2},
+                    "name": "echo",
+                    "arguments": {"value": "second", "delay_ms": 10},
                 },
             },
-            # Call 3: get_document_summary (expect graceful error)
             {
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
                 "params": {
-                    "name": "get_document_summary",
-                    "arguments": {"doc_id": "does_not_exist"},
+                    "name": "echo",
+                    "arguments": {"value": "third", "delay_ms": 0},
                 },
             },
         ]
 
-        responses = _send_jsonrpc(mcp_server, messages, expected_responses=4, timeout=60.0)
+        responses = _send_jsonrpc(
+            protocol_mcp_server,
+            messages,
+            expected_responses=4,
+            timeout=5.0,
+        )
 
         # All four responses (init + 3 tool calls) should arrive
         for req_id in (1, 2, 3, 4):
@@ -512,11 +527,9 @@ class TestMCPClientE2E:
             assert resp is not None, f"Missing response for id={req_id}. Got: {responses}"
             assert "result" in resp, f"Response id={req_id} missing 'result': {resp}"
 
-        # Each tool call result should have valid content
-        for req_id in (2, 3, 4):
+        expected_text = {2: "first", 3: "second", 4: "third"}
+        for req_id, text in expected_text.items():
             resp = _find(responses, req_id)
             assert resp is not None
             content = resp["result"]["content"]
-            assert isinstance(content, list)
-            assert len(content) >= 1
-            assert all("type" in block for block in content)
+            assert content == [{"type": "text", "text": text}]

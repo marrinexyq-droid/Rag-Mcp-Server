@@ -8,13 +8,9 @@ Covers:
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.observability.dashboard.services.config_service import (
-    ComponentInfo,
     ConfigService,
 )
-
 
 # ── Fake Settings ────────────────────────────────────────────────────
 
@@ -140,3 +136,27 @@ class TestDashboardImports:
     def test_start_script_exists(self) -> None:
         script_path = Path("scripts/start_dashboard.py")
         assert script_path.exists()
+
+
+@patch("src.core.trace.TraceCollector")
+@patch("src.core.settings.load_settings")
+@patch("src.ingestion.pipeline.IngestionPipeline")
+def test_ingestion_manager_closes_pipeline_on_failure(
+    mock_pipeline_class,
+    mock_load_settings,
+    mock_collector_class,
+) -> None:
+    """The long-lived Dashboard releases pipeline resources after a failed run."""
+    from src.observability.dashboard.pages.ingestion_manager import _run_ingestion
+
+    pipeline = mock_pipeline_class.return_value
+    pipeline.run.side_effect = RuntimeError("ingestion failed")
+    uploaded = MagicMock()
+    uploaded.name = "sample.pdf"
+    uploaded.getbuffer.return_value = b"pdf"
+
+    _run_ingestion(uploaded, "test", MagicMock(), MagicMock())
+
+    pipeline.close.assert_called_once_with()
+    mock_load_settings.assert_called_once_with()
+    mock_collector_class.return_value.collect.assert_called_once()

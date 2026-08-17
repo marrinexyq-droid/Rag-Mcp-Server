@@ -12,10 +12,13 @@ Run only when validating Azure Embedding configuration.
 """
 
 import pytest
-from src.ingestion.embedding.dense_encoder import DenseEncoder
-from src.core.types import Chunk
+
 from src.core.settings import load_settings
+from src.core.types import Chunk
+from src.ingestion.embedding.dense_encoder import DenseEncoder
 from src.libs.embedding.embedding_factory import EmbeddingFactory
+
+pytestmark = [pytest.mark.integration, pytest.mark.external]
 
 
 @pytest.fixture(scope="module")
@@ -343,7 +346,7 @@ def test_semantic_similarity_observation(encoder):
     sim_dogs_canines = cosine_similarity(vectors[0], vectors[2])  # Similar: dogs vs canines
     
     # Log observations
-    print(f"\n📊 Semantic Similarity:")
+    print("\n📊 Semantic Similarity:")
     print(f"   Dogs vs Cats: {sim_dogs_cats:.4f}")
     print(f"   Dogs vs Canines: {sim_dogs_canines:.4f}")
     

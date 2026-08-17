@@ -13,7 +13,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -179,6 +178,7 @@ class TestDataIngestion:
         assert "Unsupported" in result.stdout or "unsupported" in result.stdout.lower()
     
     @pytest.mark.integration
+    @pytest.mark.external
     def test_ingest_simple_pdf(self, sample_pdf):
         """Test ingesting a simple PDF file.
         
@@ -200,6 +200,7 @@ class TestDataIngestion:
         assert "SUMMARY" in result.stdout
     
     @pytest.mark.integration
+    @pytest.mark.external
     def test_ingest_complex_pdf_with_images(self, complex_pdf):
         """Test ingesting a complex PDF with images.
         
@@ -226,6 +227,7 @@ class TestDataIngestion:
             assert "chunks" in result.stdout.lower()
     
     @pytest.mark.integration
+    @pytest.mark.external
     def test_ingest_skip_already_processed(self, sample_pdf):
         """Test that already processed files are skipped.
         
@@ -258,6 +260,7 @@ class TestDataIngestion:
         assert "skip" in result2.stdout.lower() or "already processed" in result2.stdout.lower()
     
     @pytest.mark.integration
+    @pytest.mark.external
     def test_ingest_force_reprocess(self, sample_pdf):
         """Test that --force flag causes re-processing."""
         # First run
@@ -288,6 +291,7 @@ class TestDataIngestion:
             assert "chunks" in result2.stdout.lower() or "processed" in result2.stdout.lower()
     
     @pytest.mark.integration
+    @pytest.mark.external
     def test_ingest_directory(self, tmp_path, sample_pdf):
         """Test ingesting all PDFs in a directory."""
         # Create a directory with multiple PDFs (copy sample)
@@ -330,6 +334,7 @@ class TestIngestScriptIntegration:
     """Integration tests that verify data persistence."""
     
     @pytest.mark.integration
+    @pytest.mark.external
     def test_creates_vector_store_data(self, tmp_path):
         """Verify that ingestion creates vector store data."""
         # This test verifies the pipeline creates the expected output files
@@ -359,8 +364,7 @@ class TestIngestScriptIntegration:
         # Verify data directories exist after successful ingestion
         if result.returncode == 0:
             chroma_dir = PROJECT_ROOT / "data" / "db" / "chroma"
-            bm25_dir = PROJECT_ROOT / "data" / "db" / "bm25" / "e2e_test_persistence"
-            
+
             assert chroma_dir.exists(), "ChromaDB directory should exist"
             # BM25 index directory may or may not exist based on implementation
 

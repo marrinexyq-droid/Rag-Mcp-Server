@@ -12,13 +12,14 @@ Test Data:
 - simple.pdf: Basic PDF for regression testing
 """
 
-import os
-import shutil
-import pytest
 from pathlib import Path
 
+import pytest
+
 from src.core.settings import load_settings
-from src.ingestion.pipeline import IngestionPipeline, PipelineResult
+from src.ingestion.pipeline import IngestionPipeline
+
+pytestmark = [pytest.mark.integration, pytest.mark.llm, pytest.mark.external]
 
 
 class TestIngestionPipeline:
@@ -263,8 +264,8 @@ class TestPipelineComponents:
     
     def test_llm_responds(self, settings):
         """Test that Azure LLM service works."""
-        from src.libs.llm.llm_factory import LLMFactory
         from src.libs.llm.base_llm import Message
+        from src.libs.llm.llm_factory import LLMFactory
         
         llm = LLMFactory.create(settings)
         

@@ -10,9 +10,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.core.trace.trace_context import TraceContext
-from src.core.types import Document, Chunk
+from src.core.types import Chunk, Document
 from src.ingestion.pipeline import IngestionPipeline
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -135,3 +134,16 @@ class TestPipelineProgressCallback:
         stage_names = [c[0] for c in calls]
         expected_order = ["integrity", "load", "split", "transform", "embed", "upsert"]
         assert stage_names == expected_order
+
+
+def test_close_attempts_every_owned_resource_when_one_fails() -> None:
+    """A close failure must not prevent later resources from being released."""
+    pipeline = _make_fake_pipeline()
+    pipeline.vector_upserter.close.side_effect = RuntimeError("vector close failed")
+
+    with pytest.raises(RuntimeError, match="vector close failed"):
+        IngestionPipeline.close(pipeline)
+
+    pipeline.vector_upserter.close.assert_called_once_with()
+    pipeline.image_storage.close.assert_called_once_with()
+    pipeline.integrity_checker.close.assert_called_once_with()

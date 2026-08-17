@@ -7,8 +7,7 @@ a lightweight, open-source embedding database designed for local-first deploymen
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, cast
 
 try:
     import chromadb
@@ -21,6 +20,8 @@ from src.core.settings import resolve_path
 from src.libs.vector_store.base_vector_store import BaseVectorStore
 
 if TYPE_CHECKING:
+    from chromadb.api.types import Metadata
+
     from src.core.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,22 @@ class ChromaStore(BaseVectorStore):
             f"ChromaStore initialized successfully. "
             f"Collection count: {self.collection.count()}"
         )
+        self._closed = False
+
+    def close(self) -> None:
+        """Release the persistent Chroma client and its file handles."""
+        if self._closed:
+            return
+
+        close_client = getattr(self.client, "close", None)
+        if not callable(close_client):
+            raise RuntimeError(
+                "This ChromaDB version cannot release persistent resources; "
+                "install chromadb>=1.5.9."
+            )
+
+        close_client()
+        self._closed = True
     
     def upsert(
         self,
@@ -163,7 +180,7 @@ class ChromaStore(BaseVectorStore):
         # Prepare data for ChromaDB
         ids = []
         embeddings = []
-        metadatas = []
+        metadatas: List[Metadata] = []
         documents = []  # ChromaDB requires documents field
         
         for record in records:
@@ -190,7 +207,7 @@ class ChromaStore(BaseVectorStore):
         try:
             self.collection.upsert(
                 ids=ids,
-                embeddings=embeddings,
+                embeddings=cast(List[Sequence[float]], embeddings),
                 metadatas=metadatas,
                 documents=documents,
             )
@@ -237,7 +254,7 @@ class ChromaStore(BaseVectorStore):
         # Perform query
         try:
             results = self.collection.query(
-                query_embeddings=[vector],
+                query_embeddings=cast(List[Sequence[float]], [vector]),
                 n_results=top_k,
                 where=where_clause,
                 include=["metadatas", "distances", "documents"]
@@ -253,9 +270,12 @@ class ChromaStore(BaseVectorStore):
         
         if results and results['ids'] and results['ids'][0]:
             ids = results['ids'][0]
-            distances = results['distances'][0] if 'distances' in results else [0.0] * len(ids)
-            metadatas = results['metadatas'][0] if 'metadatas' in results else [{}] * len(ids)
-            documents = results['documents'][0] if 'documents' in results else [''] * len(ids)
+            distance_rows = results.get('distances')
+            metadata_rows = results.get('metadatas')
+            document_rows = results.get('documents')
+            distances = distance_rows[0] if distance_rows else [0.0] * len(ids)
+            metadatas = metadata_rows[0] if metadata_rows else [{}] * len(ids)
+            documents = document_rows[0] if document_rows else [''] * len(ids)
             
             for i, record_id in enumerate(ids):
                 # Convert distance to similarity score
@@ -376,7 +396,10 @@ class ChromaStore(BaseVectorStore):
                 f"Failed to delete by metadata {filter_dict}: {e}"
             ) from e
     
-    def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_metadata(
+        self,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, str | int | float | bool]:
         """Sanitize metadata to ensure ChromaDB compatibility.
         
         ChromaDB requires metadata values to be str, int, float, or bool.

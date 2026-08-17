@@ -58,8 +58,8 @@ def _try_create_search_engine() -> Any:
     Skips test if infrastructure is not available.
     """
     try:
-        from src.core.settings import load_settings
         from src.core.query_engine.hybrid_search import HybridSearch
+        from src.core.settings import load_settings
 
         settings = load_settings()
         return HybridSearch(settings)
@@ -81,6 +81,7 @@ def _try_create_evaluator() -> Any:
 
 
 @pytest.mark.e2e
+@pytest.mark.external
 class TestRecallRegression:
     """E2E recall regression tests using the golden test set.
 

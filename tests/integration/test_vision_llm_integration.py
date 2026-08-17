@@ -1,10 +1,14 @@
-import pytest
 from pathlib import Path
+
+import pytest
+
 from src.core.settings import load_settings
 from src.core.types import Chunk
 from src.ingestion.transform.image_captioner import ImageCaptioner
 
+
 @pytest.mark.integration
+@pytest.mark.external
 def test_image_captioner_azure_integration():
     """Integration test for ImageCaptioner using real Azure OpenAI Vision LLM.
     
@@ -54,7 +58,7 @@ def test_image_captioner_azure_integration():
     processed_chunk = processed_chunks[0]
     
     # Check text modification
-    print(f"\nOriginal Text: 'Here is an image: [IMAGE: img_001]'")
+    print("\nOriginal Text: 'Here is an image: [IMAGE: img_001]'")
     print(f"New Text: '{processed_chunk.text}'")
     
     assert "[IMAGE: img_001]" in processed_chunk.text

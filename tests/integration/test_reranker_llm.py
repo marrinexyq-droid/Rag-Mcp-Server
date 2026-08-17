@@ -8,14 +8,17 @@ This module tests the complete reranking flow with actual Azure OpenAI calls:
 ⚠️ WARNING: These tests make real API calls and incur costs!
 """
 
-import pytest
 from typing import List
 
-from src.core.query_engine.reranker import CoreReranker, RerankConfig, RerankResult
+import pytest
+
+from src.core.query_engine.reranker import CoreReranker, RerankResult
 from src.core.settings import load_settings
 from src.core.types import RetrievalResult
 from src.libs.reranker.llm_reranker import LLMReranker
 from src.libs.reranker.reranker_factory import RerankerFactory
+
+pytestmark = [pytest.mark.integration, pytest.mark.llm, pytest.mark.external]
 
 
 # =============================================================================
@@ -92,7 +95,7 @@ class TestCoreRerankerAzureLLM:
         reranker = RerankerFactory.create(settings)
         
         assert isinstance(reranker, LLMReranker)
-        print(f"✅ LLM Reranker created successfully")
+        print("✅ LLM Reranker created successfully")
     
     def test_core_reranker_with_llm_backend(self, settings):
         """Test CoreReranker initialization with LLM backend."""
@@ -100,7 +103,7 @@ class TestCoreRerankerAzureLLM:
         
         assert core_reranker.is_enabled is True
         assert core_reranker.reranker_type == "llm"
-        print(f"✅ CoreReranker initialized with LLM backend")
+        print("✅ CoreReranker initialized with LLM backend")
     
     def test_real_llm_reranking(self, settings, test_results):
         """Test actual LLM reranking with Azure OpenAI.
@@ -118,7 +121,7 @@ class TestCoreRerankerAzureLLM:
         query = "How do I configure Azure OpenAI settings?"
         
         print(f"\n📝 Query: {query}")
-        print(f"\n📊 Input Results (by initial score):")
+        print("\n📊 Input Results (by initial score):")
         for i, r in enumerate(test_results):
             print(f"  {i+1}. [{r.score:.2f}] {r.chunk_id}: {r.text[:60]}...")
         
@@ -131,7 +134,7 @@ class TestCoreRerankerAzureLLM:
         assert result.reranker_type == "llm"
         assert len(result.results) > 0
         
-        print(f"\n🎯 Reranked Results:")
+        print("\n🎯 Reranked Results:")
         for i, r in enumerate(result.results):
             orig_score = r.metadata.get("original_score", "N/A")
             rerank_score = r.metadata.get("rerank_score", r.score)
@@ -153,9 +156,9 @@ class TestCoreRerankerAzureLLM:
             f"Got: {bottom_2_ids}"
         )
         
-        print(f"\n✅ LLM reranking completed successfully!")
-        print(f"   - Most relevant chunk (Azure config) ranked in top 2")
-        print(f"   - Least relevant chunk (Database) ranked in bottom 2")
+        print("\n✅ LLM reranking completed successfully!")
+        print("   - Most relevant chunk (Azure config) ranked in top 2")
+        print("   - Least relevant chunk (Database) ranked in bottom 2")
         print("=" * 60)
     
     def test_reranking_preserves_metadata(self, settings, test_results):
@@ -236,7 +239,7 @@ class TestCoreRerankerFallbackIntegration:
         query = "Azure configuration"
         
         print(f"📝 Query: {query}")
-        print(f"🔧 Using invalid model to trigger fallback...")
+        print("🔧 Using invalid model to trigger fallback...")
         
         # Rerank should fallback gracefully
         result = core_reranker.rerank(query, test_results, top_k=4)
@@ -253,9 +256,9 @@ class TestCoreRerankerFallbackIntegration:
             assert r.metadata.get("reranked") is False
             assert r.metadata.get("rerank_fallback") is True
         
-        print(f"✅ Fallback triggered successfully!")
+        print("✅ Fallback triggered successfully!")
         print(f"   Reason: {result.fallback_reason[:100]}...")
-        print(f"   Original order preserved")
+        print("   Original order preserved")
         print("=" * 60)
 
 
@@ -310,7 +313,7 @@ class TestEndToEndReranking:
         query = "What embedding dimensions does text-embedding-ada-002 use?"
         
         print(f"\n📝 Query: {query}")
-        print(f"\n📊 Initial Retrieval Results:")
+        print("\n📊 Initial Retrieval Results:")
         for i, r in enumerate(retrieval_results):
             print(f"  {i+1}. [{r.score:.2f}] {r.chunk_id}: {r.text[:50]}...")
         
@@ -318,7 +321,7 @@ class TestEndToEndReranking:
         core_reranker = CoreReranker(settings)
         result = core_reranker.rerank(query, retrieval_results, top_k=3)
         
-        print(f"\n🎯 After LLM Reranking:")
+        print("\n🎯 After LLM Reranking:")
         for i, r in enumerate(result.results):
             rerank_score = r.metadata.get("rerank_score", r.score)
             print(f"  {i+1}. [rerank={rerank_score:.1f}] {r.chunk_id}: {r.text[:50]}...")
@@ -330,8 +333,8 @@ class TestEndToEndReranking:
             f"Got: {result.results[0].chunk_id}"
         )
         
-        print(f"\n✅ End-to-end reranking successful!")
-        print(f"   - Most relevant chunk (embeddings) correctly ranked first")
+        print("\n✅ End-to-end reranking successful!")
+        print("   - Most relevant chunk (embeddings) correctly ranked first")
         print(f"   - Reranker type: {result.reranker_type}")
         print(f"   - Fallback used: {result.used_fallback}")
         print("=" * 60)

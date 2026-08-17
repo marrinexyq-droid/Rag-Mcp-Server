@@ -30,7 +30,7 @@ dependencies = [
     "langchain-core>=0.3,<1",
     "langchain-openai>=0.3,<1",
     "langchain-text-splitters>=0.3,<1",
-    "chromadb>=0.4.0",
+    "chromadb>=1.5.9,<2",
     "mcp>=2.0,<3",
     "jieba>=0.42",
     "markitdown[pdf]>=0.1.0",
@@ -69,6 +69,8 @@ markers = [
     "integration: Integration tests (may require external services)",
     "e2e: End-to-end tests (full system tests)",
     "llm: marks tests that require real LLM API calls (deselect with '-m \"not llm\"')",
+    "external: tests requiring network services, provider credentials, or production data",
+    "image: tests covering image and multimodal processing",
     "slow: Slow tests that should be run less frequently",
 ]
 addopts = "-v --tb=short"

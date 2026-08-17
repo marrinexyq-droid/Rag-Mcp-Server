@@ -24,7 +24,7 @@ def _run_ingestion(
 ) -> None:
     """Save the uploaded file to a temp location and run the pipeline."""
     from src.core.settings import load_settings
-    from src.core.trace import TraceContext, TraceCollector
+    from src.core.trace import TraceCollector, TraceContext
     from src.ingestion.pipeline import IngestionPipeline
 
     settings = load_settings()
@@ -55,6 +55,7 @@ def _run_ingestion(
     trace.metadata["collection"] = collection
     trace.metadata["source"] = "dashboard"
 
+    pipeline = None
     try:
         pipeline = IngestionPipeline(settings, collection=collection)
         pipeline.run(
@@ -67,6 +68,11 @@ def _run_ingestion(
     except Exception as exc:
         status_text.error(f"Ingestion failed: {exc}")
     finally:
+        if pipeline is not None:
+            try:
+                pipeline.close()
+            except Exception as exc:
+                status_text.error(f"Ingestion cleanup failed: {exc}")
         TraceCollector().collect(trace)
         # Clean up temp file
         try:

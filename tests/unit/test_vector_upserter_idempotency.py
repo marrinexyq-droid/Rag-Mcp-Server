@@ -8,12 +8,13 @@ Test Coverage:
 5. Error handling: Validation and failure scenarios
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-from src.ingestion.storage.vector_upserter import VectorUpserter
-from src.core.types import Chunk
-from src.core.settings import Settings
+from unittest.mock import Mock, patch
 
+import pytest
+
+from src.core.settings import Settings
+from src.core.types import Chunk
+from src.ingestion.storage.vector_upserter import VectorUpserter
 
 # ============================================================================
 # Fixtures
@@ -146,10 +147,10 @@ def test_chunk_id_changes_with_source_path(upserter_with_mock_store, sample_chun
 def test_chunk_id_generation_missing_source_path(upserter_with_mock_store):
     """Test that missing source_path raises ValueError during Chunk creation."""
     upserter, _ = upserter_with_mock_store
-    
+
     # Chunk validation will catch this during initialization
     with pytest.raises(ValueError, match="source_path"):
-        chunk = Chunk(
+        Chunk(
             id="temp",
             text="Test",
             metadata={"chunk_index": 0},  # Missing source_path
@@ -361,6 +362,15 @@ def test_upsert_batch_empty_batches(upserter_with_mock_store):
     
     with pytest.raises(ValueError, match="empty"):
         upserter.upsert_batch([])
+
+
+def test_close_releases_vector_store(upserter_with_mock_store):
+    """Closing the owner releases its vector-store adapter."""
+    upserter, mock_store = upserter_with_mock_store
+
+    upserter.close()
+
+    mock_store.close.assert_called_once_with()
 
 
 # ============================================================================

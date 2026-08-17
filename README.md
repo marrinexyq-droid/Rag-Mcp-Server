@@ -157,10 +157,13 @@ python scripts/start_dashboard.py
 
 ```powershell
 python -m pytest tests/unit/test_config_loading.py tests/unit/test_llm_profiles.py
-python -m pytest tests/unit -m "not llm"
+python -m pytest -m "not llm and not external"
+
+# 仅在已配置凭据、网络和测试数据时主动运行
+python -m pytest -m external
 ```
 
-需要真实调用 API 的测试会产生费用，因此默认开发验证应优先运行不依赖外部服务的测试。DeepSeek 直连已完成真实聊天验证；VectorEngine 已验证可以访问模型列表，但聊天调用仍取决于中转账户余额与模型配额。
+`unit`、`integration`、`e2e` 描述测试层级；`external` 描述运行依赖，两者可以组合。默认门禁覆盖所有可离线运行的单元、集成和端到端测试；标记为 `external` 的测试可能访问网络服务、生产数据或付费 API，需要显式选择。DeepSeek 直连已完成真实聊天验证；VectorEngine 已验证可以访问模型列表，但聊天调用仍取决于中转账户余额与模型配额。
 
 ## 项目管理
 

@@ -10,14 +10,16 @@ Required environment variables:
 """
 
 import os
-import pytest
 from unittest.mock import Mock
 
+import pytest
+
 from src.core.settings import Settings, load_settings
-from src.core.types import Chunk
 from src.core.trace.trace_context import TraceContext
+from src.core.types import Chunk
 from src.ingestion.transform.metadata_enricher import MetadataEnricher
 
+pytestmark = pytest.mark.external
 
 # Test data: Realistic chunk needing metadata enrichment
 SAMPLE_TECHNICAL_CHUNK = """

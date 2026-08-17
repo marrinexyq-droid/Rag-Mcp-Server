@@ -24,10 +24,9 @@ Exit codes:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 # Ensure project root is on sys.path
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -44,8 +43,8 @@ if sys.platform == "win32":
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.core.settings import load_settings, Settings
-from src.core.trace import TraceContext, TraceCollector
+from src.core.settings import load_settings
+from src.core.trace import TraceCollector, TraceContext
 from src.ingestion.pipeline import IngestionPipeline, PipelineResult
 from src.observability.logger import get_logger
 
@@ -104,7 +103,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def discover_files(path: str, extensions: List[str] = None) -> List[Path]:
+def discover_files(path: str | Path, extensions: List[str] | None = None) -> List[Path]:
     """Discover files to process from path.
     
     Args:
@@ -116,23 +115,25 @@ def discover_files(path: str, extensions: List[str] = None) -> List[Path]:
     """
     if extensions is None:
         extensions = ['.pdf']
-    
-    path = Path(path)
-    
-    if not path.exists():
-        raise FileNotFoundError(f"Path does not exist: {path}")
-    
-    if path.is_file():
-        if path.suffix.lower() in extensions:
-            return [path]
+
+    source_path = Path(path)
+
+    if not source_path.exists():
+        raise FileNotFoundError(f"Path does not exist: {source_path}")
+
+    if source_path.is_file():
+        if source_path.suffix.lower() in extensions:
+            return [source_path]
         else:
-            raise ValueError(f"Unsupported file type: {path.suffix}. Supported: {extensions}")
-    
+            raise ValueError(
+                f"Unsupported file type: {source_path.suffix}. Supported: {extensions}"
+            )
+
     # Directory: recursively find all matching files
-    files = []
+    files: List[Path] = []
     for ext in extensions:
-        files.extend(path.rglob(f"*{ext}"))
-        files.extend(path.rglob(f"*{ext.upper()}"))
+        files.extend(source_path.rglob(f"*{ext}"))
+        files.extend(source_path.rglob(f"*{ext.upper()}"))
     
     # Remove duplicates and sort
     files = sorted(set(files))
@@ -233,7 +234,7 @@ def main() -> int:
         return 0
     
     # Initialize pipeline
-    print(f"\n[INFO] Initializing pipeline...")
+    print("\n[INFO] Initializing pipeline...")
     print(f"   Collection: {args.collection}")
     print(f"   Force: {args.force}")
     
@@ -248,51 +249,57 @@ def main() -> int:
         logger.exception("Pipeline initialization failed")
         return 2
     
-    # Process files
-    print(f"\n[INFO] Processing files...")
-    results: List[PipelineResult] = []
-    
-    collector = TraceCollector()
+    try:
+        # Process files
+        print("\n[INFO] Processing files...")
+        results: List[PipelineResult] = []
 
-    for i, file_path in enumerate(files, 1):
-        print(f"\n[{i}/{len(files)}] Processing: {file_path}")
-        
-        try:
-            trace = TraceContext(trace_type="ingestion")
-            trace.metadata["source_path"] = str(file_path)
-            result = pipeline.run(str(file_path), trace=trace)
-            collector.collect(trace)
-            results.append(result)
-            
-            if result.success:
-                skipped = result.stages.get("integrity", {}).get("skipped", False)
-                if skipped:
-                    print(f"   [SKIP] Skipped (already processed)")
+        collector = TraceCollector()
+
+        for i, file_path in enumerate(files, 1):
+            print(f"\n[{i}/{len(files)}] Processing: {file_path}")
+
+            try:
+                trace = TraceContext(trace_type="ingestion")
+                trace.metadata["source_path"] = str(file_path)
+                result = pipeline.run(str(file_path), trace=trace)
+                collector.collect(trace)
+                results.append(result)
+
+                if result.success:
+                    skipped = result.stages.get("integrity", {}).get("skipped", False)
+                    if skipped:
+                        print("   [SKIP] Skipped (already processed)")
+                    else:
+                        print(f"   [OK] Success: {result.chunk_count} chunks, {result.image_count} images")
                 else:
-                    print(f"   [OK] Success: {result.chunk_count} chunks, {result.image_count} images")
-            else:
-                print(f"   [FAIL] Failed: {result.error}")
-        
-        except Exception as e:
-            logger.exception(f"Unexpected error processing {file_path}")
-            results.append(PipelineResult(
-                success=False,
-                file_path=str(file_path),
-                error=str(e)
-            ))
-            print(f"   [FAIL] Error: {e}")
-    
-    # Print summary
-    print_summary(results, args.verbose)
-    
-    # Determine exit code
-    successful = sum(1 for r in results if r.success)
-    if successful == len(results):
-        return 0  # All successful
-    elif successful > 0:
-        return 1  # Partial failure
-    else:
-        return 2  # Complete failure
+                    print(f"   [FAIL] Failed: {result.error}")
+
+            except Exception as e:
+                logger.exception(f"Unexpected error processing {file_path}")
+                results.append(PipelineResult(
+                    success=False,
+                    file_path=str(file_path),
+                    error=str(e)
+                ))
+                print(f"   [FAIL] Error: {e}")
+
+        # Print summary
+        print_summary(results, args.verbose)
+
+        # Determine exit code
+        successful = sum(1 for r in results if r.success)
+        if successful == len(results):
+            return 0  # All successful
+        elif successful > 0:
+            return 1  # Partial failure
+        else:
+            return 2  # Complete failure
+    finally:
+        try:
+            pipeline.close()
+        except Exception:
+            logger.exception("Pipeline cleanup failed")
 
 
 if __name__ == "__main__":

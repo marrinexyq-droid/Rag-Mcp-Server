@@ -5,13 +5,12 @@ real upsert→query roundtrip cycles, ensuring data persistence and retrieval
 correctness.
 """
 
+import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, List
 
 import pytest
 
-from src.core.settings import Settings
 from src.libs.vector_store.chroma_store import ChromaStore
 
 
@@ -42,11 +41,27 @@ def chroma_store(test_settings):
     """Create a ChromaStore instance for testing."""
     store = ChromaStore(settings=test_settings)
     yield store
-    # Cleanup: clear collection after each test
     try:
         store.clear()
-    except Exception:
-        pass
+    finally:
+        store.close()
+
+
+def test_context_manager_releases_persistent_files(test_settings, temp_chroma_dir):
+    """Leaving the store context releases files for immediate deletion."""
+    with ChromaStore(settings=test_settings) as store:
+        store.upsert(
+            [
+                {
+                    "id": "context-managed",
+                    "vector": [0.1, 0.2, 0.3],
+                    "metadata": {"source": "context.pdf"},
+                }
+            ]
+        )
+
+    shutil.rmtree(temp_chroma_dir)
+    assert not Path(temp_chroma_dir).exists()
 
 
 class TestChromaStoreBasicOperations:
@@ -355,26 +370,21 @@ class TestChromaStorePersistence:
     
     def test_data_persists_across_instances(self, test_settings):
         """Test that data persists when recreating ChromaStore instance."""
-        # Create first instance and insert data
-        store1 = ChromaStore(settings=test_settings)
-        records = [
-            {'id': 'persist_test', 'vector': [1.0, 2.0, 3.0], 'metadata': {'test': 'data'}}
-        ]
-        store1.upsert(records)
-        
-        # Create second instance (should load existing data)
-        store2 = ChromaStore(settings=test_settings)
-        
-        # Verify data is accessible from second instance
-        stats = store2.get_collection_stats()
-        assert stats['count'] == 1
-        
-        results = store2.query([1.0, 2.0, 3.0], top_k=1)
-        assert len(results) == 1
-        assert results[0]['id'] == 'persist_test'
-        
-        # Cleanup
-        store2.clear()
+        with ChromaStore(settings=test_settings) as store1:
+            records = [
+                {'id': 'persist_test', 'vector': [1.0, 2.0, 3.0], 'metadata': {'test': 'data'}}
+            ]
+            store1.upsert(records)
+
+            with ChromaStore(settings=test_settings) as store2:
+                stats = store2.get_collection_stats()
+                assert stats['count'] == 1
+
+                results = store2.query([1.0, 2.0, 3.0], top_k=1)
+                assert len(results) == 1
+                assert results[0]['id'] == 'persist_test'
+
+                store2.clear()
 
 
 class TestChromaStoreMetadataSanitization:

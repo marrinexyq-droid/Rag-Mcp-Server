@@ -24,7 +24,23 @@ class BaseVectorStore(ABC):
     - Config-Driven: Instances are created via factory based on settings.
     - Idempotent: upsert() operations should be safely repeatable.
     """
-    
+
+    def __enter__(self) -> BaseVectorStore:
+        """Return this store for context-managed use."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: Any,
+    ) -> None:
+        """Release resources when leaving a context."""
+        self.close()
+
+    def close(self) -> None:
+        """Release provider resources; stateless providers may use this no-op."""
+
     @abstractmethod
     def upsert(
         self,

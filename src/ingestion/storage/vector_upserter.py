@@ -15,10 +15,10 @@ Design Principles:
 """
 
 import hashlib
-from typing import List, Dict, Any, Optional
+from typing import Any, List, Optional
 
-from src.core.types import Chunk
 from src.core.settings import Settings
+from src.core.types import Chunk
 from src.libs.vector_store.vector_store_factory import VectorStoreFactory
 
 
@@ -201,3 +201,7 @@ class VectorUpserter:
         
         # Single upsert operation
         return self.upsert(all_chunks, all_vectors, trace=trace)
+
+    def close(self) -> None:
+        """Release the vector-store adapter owned by this upserter."""
+        self.vector_store.close()
