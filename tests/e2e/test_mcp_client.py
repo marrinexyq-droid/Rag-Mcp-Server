@@ -26,9 +26,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pytest
+import yaml
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 PROTOCOL_TEST_SERVER = PROJECT_ROOT / "tests" / "fixtures" / "mcp_protocol_server.py"
+PROJECT_TEST_SERVER = PROJECT_ROOT / "tests" / "fixtures" / "mcp_project_server.py"
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -122,6 +126,8 @@ def _find(responses: List[Dict[str, Any]], req_id: int) -> Optional[Dict[str, An
 
 def _terminate(proc: subprocess.Popen) -> None:
     """Terminate the server subprocess gracefully."""
+    if proc.poll() is not None:
+        return
     proc.terminate()
     try:
         proc.wait(timeout=5)
@@ -163,6 +169,100 @@ def protocol_mcp_server():
     proc = _start_server([sys.executable, str(PROTOCOL_TEST_SERVER)])
     yield proc
     _terminate(proc)
+
+
+@pytest.fixture()
+def isolated_project_mcp_server(tmp_path: Path):
+    """Configure the real project server with an isolated, seeded Chroma store."""
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+
+    database_root = tmp_path / "db"
+    chroma_path = database_root / "chroma"
+    traces_path = tmp_path / "logs" / "traces.jsonl"
+    collection_name = "integration"
+
+    client = chromadb.PersistentClient(
+        path=str(chroma_path),
+        settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
+    )
+    collection = client.get_or_create_collection(
+        name=collection_name,
+        metadata={"hnsw:space": "cosine"},
+    )
+    collection.upsert(
+        ids=["doc-integration_0000_fixture"],
+        embeddings=[[1.0, 0.0, 0.0]],
+        documents=["The integration fixture verifies the real MCP project server."],
+        metadatas=[
+            {
+                "source_ref": "doc-integration",
+                "source_path": "fixtures/integration.pdf",
+                "title": "Integration Fixture",
+                "summary": "A deterministic document used for MCP integration verification.",
+                "chunk_index": 0,
+            }
+        ],
+    )
+    client.close()
+
+    config = {
+        "llm": {
+            "provider": "openai",
+            "model": "unused-in-integration-test",
+            "temperature": 0.0,
+            "max_tokens": 64,
+        },
+        "embedding": {
+            "provider": "deterministic-test",
+            "model": "local-fixture",
+            "dimensions": 3,
+        },
+        "vector_store": {
+            "provider": "chroma",
+            "persist_directory": str(chroma_path),
+            "collection_name": collection_name,
+        },
+        "retrieval": {
+            "dense_top_k": 5,
+            "sparse_top_k": 5,
+            "fusion_top_k": 5,
+            "rrf_k": 60,
+        },
+        "rerank": {
+            "enabled": False,
+            "provider": "none",
+            "model": "none",
+            "top_k": 5,
+        },
+        "evaluation": {
+            "enabled": False,
+            "provider": "custom",
+            "metrics": ["hit_rate"],
+        },
+        "observability": {
+            "log_level": "INFO",
+            "trace_enabled": True,
+            "trace_file": str(traces_path),
+            "structured_logging": True,
+        },
+    }
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text(
+        yaml.safe_dump(config, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["RAG_MCP_SETTINGS_PATH"] = str(settings_path)
+    server_parameters = StdioServerParameters(
+        command=sys.executable,
+        args=[str(PROJECT_TEST_SERVER)],
+        cwd=PROJECT_ROOT,
+        env=env,
+    )
+    return server_parameters, traces_path
 
 
 # ── Tests ─────────────────────────────────────────────────────────────
@@ -219,6 +319,55 @@ class TestMCPClientE2E:
             schema = tool["inputSchema"]
             assert schema.get("type") == "object"
             assert "properties" in schema
+
+    @pytest.mark.e2e
+    @pytest.mark.asyncio
+    async def test_isolated_project_server_calls_all_three_tools(
+        self,
+        isolated_project_mcp_server,
+    ) -> None:
+        """A real project server serves all tools without production data or network."""
+        server_parameters, traces_path = isolated_project_mcp_server
+
+        async with stdio_client(server_parameters) as (read_stream, write_stream):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+
+                tools_response = await session.list_tools()
+                assert {tool.name for tool in tools_response.tools} == {
+                    "query_knowledge_hub",
+                    "list_collections",
+                    "get_document_summary",
+                }
+
+                list_response = await session.call_tool(
+                    "list_collections",
+                    {"include_stats": True},
+                )
+                assert list_response.is_error is False
+                assert "integration" in list_response.content[0].text
+
+                summary_response = await session.call_tool(
+                    "get_document_summary",
+                    {"doc_id": "doc-integration", "collection": "integration"},
+                )
+                assert summary_response.is_error is False
+                assert "Integration Fixture" in summary_response.content[0].text
+
+                query_response = await session.call_tool(
+                    "query_knowledge_hub",
+                    {
+                        "query": "integration fixture",
+                        "top_k": 3,
+                        "collection": "integration",
+                    },
+                )
+                assert query_response.is_error is False
+                query_text = " ".join(
+                    block.text for block in query_response.content if hasattr(block, "text")
+                )
+                assert "Integration Fixture" in query_text
+                assert traces_path.exists()
 
     # ------------------------------------------------------------------
     # 2. tools/call – query_knowledge_hub (protocol round-trip)

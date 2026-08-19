@@ -269,6 +269,10 @@ class TestListCollectionsToolChromaClient:
         
         assert result == mock_client
         mock_client_class.assert_called_once()
+
+        cached_result = tool_with_config._get_chroma_client()
+        assert cached_result is mock_client
+        mock_client_class.assert_called_once()
     
     @patch('chromadb.PersistentClient')
     @patch('chromadb.config.Settings')

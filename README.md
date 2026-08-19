@@ -33,6 +33,7 @@ PDF 文档
 ## 环境要求
 
 - Python 3.10–3.12（本地开发使用 Python 3.11）
+- [uv](https://docs.astral.sh/uv/)（推荐，用于按锁文件复现依赖）
 - [Ollama](https://ollama.com/) 及 `nomic-embed-text` 模型
 - 一个可用的 OpenAI 兼容 API，或 DeepSeek API
 - Git（仅开发和版本管理需要）
@@ -44,9 +45,11 @@ PDF 文档
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+uv sync --extra dev
 ollama pull nomic-embed-text
 ```
+
+`uv.lock` 固定完整的传递依赖，保证不同机器使用同一组已验证版本。如果暂时不使用 uv，也可以执行 `python -m pip install -e ".[dev]"`，但安装器会在 `pyproject.toml` 的兼容范围内重新解析依赖。
 
 设置 DeepSeek Key。这里的值只进入当前用户的环境变量，不要把真实 Key 写入 YAML、提交记录或 Issue。
 
@@ -145,6 +148,8 @@ MCP 客户端配置示例（把路径替换为你电脑上的绝对路径）：
 }
 ```
 
+如需让同一份安装使用另一份配置，可在客户端的 Server 配置中增加环境变量 `RAG_MCP_SETTINGS_PATH`，值为目标 YAML 的绝对路径。显式传给 CLI 的 `--config` 仍具有更高优先级。
+
 ## 观测面板
 
 ```powershell
@@ -156,8 +161,12 @@ python scripts/start_dashboard.py
 ## 验证
 
 ```powershell
+uv lock --check
 python -m pytest tests/unit/test_config_loading.py tests/unit/test_llm_profiles.py
 python -m pytest -m "not llm and not external"
+
+# 真实项目 Server + 隔离测试库，离线调用全部三个 MCP tools
+python -m pytest tests/e2e/test_mcp_client.py -k isolated_project_server
 
 # 仅在已配置凭据、网络和测试数据时主动运行
 python -m pytest -m external
@@ -171,7 +180,7 @@ python -m pytest -m external
 - [v0.1 Local MVP](https://github.com/marrinexyq-droid/Rag-Mcp-Server/milestone/1)：当前里程碑。
 - [个人 Project 看板](https://github.com/users/marrinexyq-droid/projects/1)：任务状态管理。
 
-近期重点是完成端到端 RAG 验证、稳定 MCP 客户端接入，并逐步收敛依赖版本带来的测试兼容问题。
+近期重点是使用示例 PDF 完成真实的 ingest → 混合检索 → MCP 查询 → Trace 验证。依赖锁定、三个 MCP tools 的官方客户端离线集成，以及 Dashboard 六页面冒烟已纳入默认门禁。
 
 ## 安全约定
 

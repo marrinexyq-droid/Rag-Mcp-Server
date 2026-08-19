@@ -9,9 +9,8 @@ predictable and testable.
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
-from src.core.settings import resolve_path
+from src.core.settings import SettingsError, load_settings, resolve_path
 from src.core.trace.trace_context import TraceContext
 
 logger = logging.getLogger(__name__)
@@ -28,7 +27,17 @@ class TraceCollector:
             Parent directories are created automatically.
     """
 
-    def __init__(self, traces_path: str | Path = _DEFAULT_TRACES_PATH) -> None:
+    def __init__(self, traces_path: str | Path | None = None) -> None:
+        if traces_path is None:
+            try:
+                traces_path = resolve_path(load_settings().observability.trace_file)
+            except (OSError, SettingsError, TypeError, ValueError):
+                logger.warning(
+                    "Unable to load the configured trace path; using %s",
+                    _DEFAULT_TRACES_PATH,
+                )
+                traces_path = _DEFAULT_TRACES_PATH
+
         self._path = Path(traces_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
 

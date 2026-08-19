@@ -116,6 +116,7 @@ class ListCollectionsTool:
         """
         self._settings = settings
         self._config = config
+        self._chroma_client: Any = None
         
     @property
     def settings(self) -> Settings:
@@ -153,6 +154,9 @@ class ListCollectionsTool:
             ImportError: If chromadb is not installed.
             RuntimeError: If client creation fails.
         """
+        if self._chroma_client is not None:
+            return self._chroma_client
+
         try:
             import chromadb
             from chromadb.config import Settings as ChromaSettings
@@ -170,14 +174,14 @@ class ListCollectionsTool:
             persist_path.mkdir(parents=True, exist_ok=True)
         
         try:
-            client = chromadb.PersistentClient(
+            self._chroma_client = chromadb.PersistentClient(
                 path=str(persist_path),
                 settings=ChromaSettings(
                     anonymized_telemetry=False,
                     allow_reset=True,
                 )
             )
-            return client
+            return self._chroma_client
         except Exception as e:
             raise RuntimeError(
                 f"Failed to initialize ChromaDB client at '{persist_path}': {e}"

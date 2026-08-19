@@ -29,6 +29,7 @@ from src.core.types import RetrievalResult
 if TYPE_CHECKING:
     from src.core.query_engine.hybrid_search import HybridSearch
     from src.core.query_engine.reranker import CoreReranker
+    from src.libs.embedding.base_embedding import BaseEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 TOOL_NAME = "query_knowledge_hub"
 TOOL_DESCRIPTION = """Search the knowledge base for relevant documents.
 
-This tool uses hybrid search (semantic + keyword) to find the most relevant 
+This tool uses hybrid search (semantic + keyword) to find the most relevant
 documents matching your query. Results include source citations for reference.
 
 Parameters:
@@ -123,7 +124,7 @@ class QueryKnowledgeHubTool:
         self.config = config or QueryKnowledgeHubConfig()
         self._hybrid_search = hybrid_search
         self._reranker = reranker
-        self._embedding_client = None
+        self._embedding_client: BaseEmbedding | None = None
         self._response_builder = response_builder or ResponseBuilder()
         
         # Track initialization state
@@ -196,7 +197,10 @@ class QueryKnowledgeHubTool:
         # BM25Indexer just holds the index dir path; the SparseRetriever
         # calls _ensure_index_loaded() on every search, which always
         # reloads from disk — so it picks up dashboard-written data.
-        bm25_indexer = BM25Indexer(index_dir=str(resolve_path(f"data/db/bm25/{collection}")))
+        vector_store_path = resolve_path(self.settings.vector_store.persist_directory)
+        bm25_indexer = BM25Indexer(
+            index_dir=str(vector_store_path.parent / "bm25" / collection)
+        )
         sparse_retriever = create_sparse_retriever(
             settings=self.settings,
             bm25_indexer=bm25_indexer,

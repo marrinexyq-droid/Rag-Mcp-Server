@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -16,6 +17,10 @@ REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 
 # Default absolute path to settings.yaml
 DEFAULT_SETTINGS_PATH: Path = REPO_ROOT / "config" / "settings.yaml"
+
+# Allows MCP clients and automated tests to select a configuration without
+# changing the process working directory or the tracked default file.
+SETTINGS_PATH_ENV = "RAG_MCP_SETTINGS_PATH"
 
 
 def resolve_path(relative: Union[str, Path]) -> Path:
@@ -324,10 +329,15 @@ def load_settings(path: str | Path | None = None) -> Settings:
     """Load settings from a YAML file and validate required fields.
 
     Args:
-        path: Path to settings YAML.  Defaults to
-            ``<repo>/config/settings.yaml`` (absolute, CWD-independent).
+        path: Path to settings YAML. Explicit paths take precedence over the
+            ``RAG_MCP_SETTINGS_PATH`` environment variable. If neither is set,
+            defaults to ``<repo>/config/settings.yaml``.
     """
-    settings_path = Path(path) if path is not None else DEFAULT_SETTINGS_PATH
+    configured_path = path
+    if configured_path is None:
+        configured_path = os.getenv(SETTINGS_PATH_ENV) or DEFAULT_SETTINGS_PATH
+
+    settings_path = Path(configured_path)
     if not settings_path.is_absolute():
         settings_path = resolve_path(settings_path)
     if not settings_path.exists():

@@ -2,14 +2,15 @@
 
 import json
 import time
+from types import SimpleNamespace
 
 import pytest
 
-from src.core.trace.trace_context import TraceContext
 from src.core.trace.trace_collector import TraceCollector
-
+from src.core.trace.trace_context import TraceContext
 
 # ── TraceContext basics ──────────────────────────────────────────────
+
 
 class TestTraceContextInit:
     """Verify constructor defaults and trace_type."""
@@ -41,6 +42,7 @@ class TestTraceContextInit:
 
 
 # ── record_stage ────────────────────────────────────────────────────
+
 
 class TestRecordStage:
     """Verify stage recording and backward compatibility."""
@@ -80,6 +82,7 @@ class TestRecordStage:
 
 # ── get_stage_data (backward-compat) ────────────────────────────────
 
+
 class TestGetStageData:
     """Backward-compatible helper returns last-written data."""
 
@@ -100,6 +103,7 @@ class TestGetStageData:
 
 
 # ── finish ──────────────────────────────────────────────────────────
+
 
 class TestFinish:
     """Lifecycle: finish() sets finished_at and freezes elapsed."""
@@ -123,6 +127,7 @@ class TestFinish:
 
 # ── elapsed_ms ──────────────────────────────────────────────────────
 
+
 class TestElapsedMs:
     """Timing helpers."""
 
@@ -144,6 +149,7 @@ class TestElapsedMs:
 
 # ── to_dict & JSON serialisation ────────────────────────────────────
 
+
 class TestToDict:
     """to_dict() produces a JSON-serialisable dict."""
 
@@ -152,8 +158,15 @@ class TestToDict:
         tc.record_stage("load", {"method": "markitdown"}, elapsed_ms=100)
         tc.finish()
         d = tc.to_dict()
-        for key in ("trace_id", "trace_type", "started_at",
-                     "finished_at", "total_elapsed_ms", "stages", "metadata"):
+        for key in (
+            "trace_id",
+            "trace_type",
+            "started_at",
+            "finished_at",
+            "total_elapsed_ms",
+            "stages",
+            "metadata",
+        ):
             assert key in d, f"missing key: {key}"
 
     def test_trace_type_in_output(self) -> None:
@@ -177,6 +190,7 @@ class TestToDict:
 
 
 # ── TraceCollector ──────────────────────────────────────────────────
+
 
 class TestTraceCollector:
     """TraceCollector persists traces to JSON Lines file."""
@@ -228,5 +242,20 @@ class TestTraceCollector:
     def test_path_property(self, tmp_path) -> None:
         p = tmp_path / "sub" / "traces.jsonl"
         collector = TraceCollector(traces_path=p)
+        assert collector.path == p
+        assert p.parent.exists()
+
+    def test_default_path_comes_from_settings(self, tmp_path, monkeypatch) -> None:
+        p = tmp_path / "configured" / "traces.jsonl"
+        settings = SimpleNamespace(
+            observability=SimpleNamespace(trace_file=str(p)),
+        )
+        monkeypatch.setattr(
+            "src.core.trace.trace_collector.load_settings",
+            lambda: settings,
+        )
+
+        collector = TraceCollector()
+
         assert collector.path == p
         assert p.parent.exists()
