@@ -120,6 +120,26 @@ python scripts/query.py --query "这批文档的核心内容是什么？" --coll
 
 需要查看检索中间结果时增加 `--verbose`；临时关闭重排时增加 `--no-rerank`。
 
+### 本地 MVP 端到端验收
+
+仓库自带的一页示例 PDF 可用于验证真实的 DeepSeek Transform、Ollama Embedding、Chroma/BM25 混合检索、MCP 引用和 Trace。以下命令使用隔离集合 `issue4-e2e`；首次强制摄取会调用当前 LLM Profile，可能产生少量 API 费用。
+
+```powershell
+# 1. 强制完成一次真实摄取
+python scripts/ingest.py --path tests/fixtures/sample_documents/simple.pdf --collection issue4-e2e --force
+
+# 2. 重复摄取应由 SHA256 完整性检查跳过，不再调用模型
+python scripts/ingest.py --path tests/fixtures/sample_documents/simple.pdf --collection issue4-e2e
+
+# 3. 查看 Dense、BM25 与 RRF 的中间结果
+python scripts/query.py --query "What does the document say about MarkItDown conversion and metadata?" --collection issue4-e2e --top-k 3 --no-rerank --verbose
+
+# 4. 用官方 MCP ClientSession 启动生产 Server，并校验工具、集合、引用和 Trace
+python scripts/verify_local_mvp.py --collection issue4-e2e --expect-source simple.pdf
+```
+
+验收通过时，第二条命令显示 `[SKIP]`，CLI 的 Dense 与 Sparse 结果均指向 `simple.pdf`，MCP 验证输出至少一个 citation，并给出对应的 `trace_id` 与耗时。Trace 文件位置来自 `config/settings.yaml` 的 `observability.trace_file`，不依赖未提交的手工路径配置。
+
 ## MCP 服务
 
 stdio 服务入口是：
@@ -167,6 +187,9 @@ python -m pytest -m "not llm and not external"
 
 # 真实项目 Server + 隔离测试库，离线调用全部三个 MCP tools
 python -m pytest tests/e2e/test_mcp_client.py -k isolated_project_server
+
+# 已完成真实摄取后，用官方 MCP 客户端复验本地 MVP 集合
+python scripts/verify_local_mvp.py --collection issue4-e2e --expect-source simple.pdf
 
 # 仅在已配置凭据、网络和测试数据时主动运行
 python -m pytest -m external
