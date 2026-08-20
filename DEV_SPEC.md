@@ -3172,6 +3172,9 @@ dashboard:
 
 ### 7.1 云端部署与后端架构学习
 虽然当前阶段我们主要采用“本地运行”模式，但本项目的架构设计完全支持向云端迁移。这也是一个极佳的学习后端工程化的切入点。
+
+> 该方向的第一个可执行增量已经拆分为 [DEV_SPEC_V0.2.md](DEV_SPEC_V0.2.md)：先完成单节点容器化与 Streamable HTTP 安全基线，再通过决策门选择公开云、身份系统和共享存储方案。
+
 - **Server 容器化**：计划编写 Dockerfile，将 MCP Server 打包为容器。这让我们有机会深入理解 Python 环境隔离、依赖管理以及 Docker 的最佳实践。
 - **云端接入**：未来可以将 Server 部署至 Azure Container Apps 或 AWS Lambda。
     - **挑战与学习点**：处理网络延时、配置 API Gateway、增加 AuthN/AuthZ 鉴权机制（保护私有数据不被公开访问）。

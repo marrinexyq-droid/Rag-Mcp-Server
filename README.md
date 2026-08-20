@@ -6,6 +6,8 @@
 
 > 项目仍处于 `0.1.0` Alpha 阶段。当前仓库是我在开源项目基础上维护和扩展的个人版本，来源与许可见 [NOTICE.md](NOTICE.md)。
 
+`DEV_SPEC` 阶段 A–I 已全部完成。下一版本的容器化与 Streamable HTTP 规划见 [`DEV_SPEC_V0.2.md`](DEV_SPEC_V0.2.md)，实现按 J1–J7 分阶段验收。
+
 ## 我在这个版本中完成的内容
 
 - 增加可选择的 LLM Profile：一个配置文件可以保存多个 API 方案。
@@ -200,7 +202,8 @@ python -m pytest -m external
 ## 项目管理
 
 - [GitHub Issues](https://github.com/marrinexyq-droid/Rag-Mcp-Server/issues)：缺陷与任务。
-- [v0.1 Local MVP](https://github.com/marrinexyq-droid/Rag-Mcp-Server/milestone/1)：当前里程碑。
+- [v0.1 Local MVP](https://github.com/marrinexyq-droid/Rag-Mcp-Server/milestone/1)：本地 MVP 已完成。
+- [v0.2 Container Runtime](https://github.com/marrinexyq-droid/Rag-Mcp-Server/milestone/2)：当前规划里程碑。
 - [个人 Project 看板](https://github.com/users/marrinexyq-droid/projects/1)：任务状态管理。
 
 近期重点是使用示例 PDF 完成真实的 ingest → 混合检索 → MCP 查询 → Trace 验证。依赖锁定、三个 MCP tools 的官方客户端离线集成，以及 Dashboard 六页面冒烟已纳入默认门禁。
